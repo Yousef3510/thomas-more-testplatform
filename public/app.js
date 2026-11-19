@@ -314,10 +314,22 @@ function openUpload(subjectId) {
 
       <label class="dropzone" id="dropzone">
         <div class="big">Klik of sleep je bestand hier</div>
-        <div class="small">PDF, PPTX of PPT — max 25 MB</div>
+        <div class="small">PDF, PPTX, PPT, TXT, CSV of JSON — max 25 MB</div>
         <div id="fileBadge"></div>
-        <input type="file" id="fileInput" accept=".pdf,.ppt,.pptx,.txt" class="hidden" />
+        <input type="file" id="fileInput" accept=".pdf,.ppt,.pptx,.txt,.csv,.json" class="hidden" />
       </label>
+
+      <div class="switch-row" style="padding-top:0">
+        <div>
+          <div style="font-weight:700">Bestand bevat al vragen &amp; antwoorden</div>
+          <div class="muted" style="font-size:12px">Zelf een Q&amp;A-bestand aanleveren i.p.v. automatisch genereren</div>
+        </div>
+        <label class="switch"><input type="checkbox" id="mQA" /><span class="slider"></span></label>
+      </div>
+      <p class="muted hidden" id="qaHint" style="font-size:12px;margin:-6px 0 16px;line-height:1.45">
+        Formaten: JSON <code>[{"question":"...","answer":"..."}]</code>, CSV <code>question,answer</code> of tekst met
+        <code>Vraag: ...</code> / <code>Antwoord: ...</code>. Meerkeuze: voeg <code>optie:</code>-regels of extra CSV-kolommen toe.
+      </p>
 
       <div class="form-grid">
         <div class="field">
@@ -330,7 +342,7 @@ function openUpload(subjectId) {
           <label for="mCount">Aantal vragen</label>
           <input type="number" id="mCount" min="1" max="30" value="5" />
         </div>
-        <div class="field">
+        <div class="field" id="typeField">
           <label for="mType">Type vragen</label>
           <select id="mType">
             <option value="closed">Gesloten (meerkeuze)</option>
@@ -363,6 +375,17 @@ function openUpload(subjectId) {
   const fileInput = document.getElementById('fileInput');
   const badge = document.getElementById('fileBadge');
   const dz = document.getElementById('dropzone');
+  const mQA = document.getElementById('mQA');
+  const qaHint = document.getElementById('qaHint');
+  const typeField = document.getElementById('typeField');
+
+  function syncQA() {
+    const on = mQA.checked;
+    qaHint.classList.toggle('hidden', !on);
+    typeField.classList.toggle('hidden', on);
+  }
+  mQA.addEventListener('change', syncQA);
+  syncQA();
 
   function setFile(f) {
     file = f;
@@ -413,6 +436,7 @@ function openUpload(subjectId) {
     fd.append('type', document.getElementById('mType').value);
     fd.append('tips', document.getElementById('mTips').checked);
     fd.append('timeLimit', document.getElementById('mTime').value);
+    fd.append('qaImport', mQA.checked);
 
     try {
       const data = await api('/tests', { method: 'POST', body: fd });
@@ -494,6 +518,8 @@ function renderTest() {
       ? 'AI-gegenereerd (OpenAI)'
       : test.engine === 'ollama'
       ? 'AI-gegenereerd (lokaal)'
+      : test.engine === 'import'
+      ? 'Zelf aangeleverd (Q&A)'
       : 'Automatisch gegenereerd';
   const readLabel =
     test.pages > 0

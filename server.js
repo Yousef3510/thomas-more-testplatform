@@ -11,6 +11,7 @@ const db = require('./lib/db');
 const { extractText } = require('./lib/parse');
 const { generateQuestions } = require('./lib/generate');
 const { gradeAttempt } = require('./lib/grade');
+const { parseQA } = require('./lib/qa');
 
 // lightweight .env loader (no dependency)
 (function loadEnv() {
@@ -249,24 +250,52 @@ app.post('/api/tests', auth, upload.single('file'), async (req, res) => {
   const tips = req.body.tips === 'true' || req.body.tips === true;
   const timeLimit = Math.max(0, parseInt(req.body.timeLimit, 10) || 0); // minutes, 0 = geen
 
+  const qaImport = req.body.qaImport === 'true' || req.body.qaImport === true;
+
   const { text, warning, pages, slides } = await extractText(file);
-  if (!text || text.length < 40) {
+  if (!text) {
     return res.status(400).json({
       error:
         warning ||
-        'Te weinig tekst gevonden in het bestand om een test te maken. (Bij gescande PDF\'s is de tekst een afbeelding — gebruik een tekst-PDF of een PowerPoint.)'
+        'Geen tekst gevonden in het bestand. (Bij gescande PDF\'s is de tekst een afbeelding — gebruik een tekst-PDF of een PowerPoint.)'
     });
   }
 
-  const opts = { count, type };
-  let generated;
-  try {
-    generated = await generateQuestions(text, opts, AI_CFG);
-  } catch (err) {
-    return res.status(500).json({ error: 'Kon geen vragen genereren: ' + err.message });
+  let questions = [];
+  let engine = 'heuristic';
+  let stats = null;
+
+  if (qaImport) {
+    const qa = parseQA(text);
+    if (qa.length === 0) {
+      return res.status(400).json({
+        error:
+          'Geen vraag/antwoord-paren gevonden. Gebruik een van deze formaten: ' +
+          'JSON [{"question":"...","answer":"..."}], CSV "question,answer" of tekst met "Vraag: ..." / "Antwoord: ...".'
+      });
+    }
+    questions = qa.slice(0, count).map((q, i) => ({ id: 'q' + i, ...q }));
+    engine = 'import';
+    stats = { totalChars: text.length, theorySentences: 0, allSentences: 0, questions: questions.length, aiQuestions: 0 };
+  } else {
+    if (text.length < 40) {
+      return res.status(400).json({
+        error:
+          warning ||
+          'Te weinig tekst gevonden in het bestand om een test te maken. (Bij gescande PDF\'s is de tekst een afbeelding — gebruik een tekst-PDF of een PowerPoint.)'
+      });
+    }
+    const opts = { count, type, fileName: file.originalname };
+    try {
+      const generated = await generateQuestions(text, opts, AI_CFG);
+      questions = generated.questions;
+      engine = generated.engine;
+      stats = generated.stats;
+    } catch (err) {
+      return res.status(500).json({ error: 'Kon geen vragen genereren: ' + err.message });
+    }
   }
 
-  const questions = generated.questions;
   if (questions.length === 0) {
     return res.status(400).json({
       error:
@@ -281,13 +310,13 @@ app.post('/api/tests', auth, upload.single('file'), async (req, res) => {
     subjectId,
     title: subject.name + ' - ' + file.originalname.replace(/\.[^.]+$/, ''),
     fileName: file.originalname,
-    engine: generated.engine,
+    engine: engine,
     type,
     tips,
     timeLimit,
     pages: pages || 0,
     slides: slides || 0,
-    stats: generated.stats,
+    stats: stats,
     createdAt: Date.now(),
     questions
   };
@@ -308,11 +337,11 @@ app.post('/api/tests', auth, upload.single('file'), async (req, res) => {
   return res.json({
     testId,
     warning,
-    engine: generated.engine,
+    engine: engine,
     count: questions.length,
     pages: pages || 0,
     slides: slides || 0,
-    stats: generated.stats,
+    stats: stats,
     test: stripAnswersForClient(test)
   });
 });

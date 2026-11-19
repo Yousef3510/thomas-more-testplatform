@@ -20,6 +20,12 @@ genereren uit hun eigen studiemateriaal (PDF of PowerPoint).
   - **tijdslimiet** (optioneel)
   - **tips** aan/uit (hint met lengte + eerste letter)
   - bij welk **vak** de test hoort
+- **Onderwerpgericht**: de bestandsnaam + inhoud bepalen het onderwerp. De AI krijgt het
+  bestand en de bestandsnaam en stelt vragen over dát onderwerp (bv. netwerken), niet over
+  willekeurige woorden. De ingebouwde motor blankeert bij definitie-zinnen ("TCP is ...") het
+  begrip zelf.
+- **Zelf vragen aanleveren (Q&A-import)**: upload een bestand dat al vragen en antwoorden bevat
+  (JSON, CSV of tekst) en gebruik dat rechtstreeks als test.
 - **Nakijken**: na de test krijg je een **score** en per vraag de **verbetering/uitleg**.
 - **Resultaten opgeslagen** op het dashboard onder het juiste vak, met een visueel percentage.
 
@@ -33,6 +39,10 @@ De app ondersteunt drie modi (instelbaar via `AI_PROVIDER`):
 | `ollama`   | **Gratis & lokaal** via een eigen Ollama-server (geen API-sleutel)  |
 | `heuristic`| Ingebouwde regelgebaseerde motor (werkt altijd, geen internet)     |
 | `auto`     | OpenAI als er een sleutel is, anders Ollama, anders `heuristic`    |
+
+De AI krijgt **de volledige tekst van het bestand én de bestandsnaam**. De prompt draagt de AI op
+het hoofdonderwerp te bepalen en daar vragen over te stellen (conceptueel begrip), en geen vragen
+te maken over onbelangrijke losse woorden.
 
 ### Lokale AI met Ollama (gratis)
 
@@ -49,6 +59,37 @@ De app ondersteunt drie modi (instelbaar via `AI_PROVIDER`):
 
 Lukt de AI-aanroep niet (bv. geen server/sleutel), dan schakelt de app automatisch terug
 naar de heuristiek en wordt er alsnog een test gemaakt.
+
+## 📝 Zelf vragen en antwoorden aanleveren (Q&A-import)
+
+Vink bij het uploaden **"Bestand bevat al vragen & antwoorden"** aan. Ondersteunde formaten:
+
+**JSON**
+```json
+[
+  { "question": "Wat is een router?", "answer": "Een apparaat dat pakketten doorstuurt." },
+  { "question": "Wat is een switch?", "answer": "Een apparaat dat een LAN verbindt.",
+    "options": ["Een apparaat dat een LAN verbindt", "Een protocol", "Een kabel"] }
+]
+```
+
+**CSV** (met of zonder hoofding; extra kolommen = meerkeuze-opties)
+```
+question,answer
+"Wat is latentie?","De tijdvertraging in een netwerk."
+```
+
+**Tekst**
+```
+Vraag: Wat is een router?
+Antwoord: Een apparaat dat datapakketten doorstuurt.
+
+Vraag: Wat is een switch?
+Antwoord: Een apparaat dat apparaten in een LAN verbindt.
+```
+
+Ook genummerde lijsten (`1. vraag` / `Antwoord:`) en `optie:`-regels worden herkend. Vragen met
+meerkeuze-opties worden als gesloten vraag getoond, anders als open vraag.
 
 ## 🚀 Starten
 
@@ -86,7 +127,8 @@ server.js          Express-server + API-routes
 lib/db.js          JSON-opslag (data/db.json)
 lib/parse.js       Volledige tekstextractie uit PDF / PPTX / PPT (+ pag./slide-telling)
 lib/clean.js       Opschonen + filteren tot echte theorie-zinnen
-lib/generate.js    Vraaggeneratie (OpenAI / Ollama / heuristiek)
+lib/generate.js    Vraaggeneratie (OpenAI / Ollama / heuristiek, onderwerpgericht)
+lib/qa.js          Q&A-import (JSON / CSV / tekst met vraag & antwoord)
 lib/grade.js       Nakijken + feedback per vraag
 public/            Frontend (HTML, CSS, vanilla JS SPA)
 data/              Automatisch aangemaakt: db.json (wordt niet in git gezet)
