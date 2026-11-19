@@ -1,68 +1,23 @@
 # 🎓 Thomas More — Testplatform Audiologie & Logopedie
 
-Een webapplicatie waarmee studenten **Audiologie** en **Logopedie** automatisch oefentests
-genereren uit hun eigen studiemateriaal (PDF of PowerPoint).
+Een webapplicatie waarmee studenten **Audiologie** en **Logopedie** oefentests maken
+op basis van een **eigen bestand met vragen en antwoorden**.
 
 ## ✨ Functies
 
 - **Inloggen / registreren** met wachtwoord (gehasht met bcrypt) en JWT-sessies.
 - **Dashboard** met vakken (Anatomie, Fysiologie, Linguïstiek, Audiologie, Logopedie, Pathologie)
   en per vak een visueel percentage van je beste/gemiddelde score.
-- **Het hele bestand wordt goed gelezen**: alle pagina's van een PDF en alle slides (incl.
-  groepsvormen, tabellen en sprekersnotities) van een PowerPoint. Woorden worden correct
-  samengesteld (geen "ge hoor"), afgebroken woorden aan het einde van een regel worden
-  hersteld en kop-/voetteksten, paginanummers en herhaalde headers worden verwijderd.
-- **Enkel de theorie wordt bevraagd**: titels, kopjes, inhoudsopgaven, verwijzingen,
-  bijschriften en opsommingen worden overgeslagen. Alleen echte theorie-zinnen komen in de test.
-- **Automatisch een test maken** met instelbare opties:
-  - aantal vragen
-  - **open**, **gesloten (meerkeuze)** of **gemengd**
-  - **tijdslimiet** (optioneel)
-  - **tips** aan/uit (hint met lengte + eerste letter)
-  - bij welk **vak** de test hoort
-- **Onderwerpgericht**: de bestandsnaam + inhoud bepalen het onderwerp. De AI krijgt het
-  bestand en de bestandsnaam en stelt vragen over dát onderwerp (bv. netwerken), niet over
-  willekeurige woorden. De ingebouwde motor blankeert bij definitie-zinnen ("TCP is ...") het
-  begrip zelf.
-- **Zelf vragen aanleveren (Q&A-import)**: upload een bestand dat al vragen en antwoorden bevat
-  (JSON, CSV of tekst) en gebruik dat rechtstreeks als test.
+- **Oefentest maken uit een vraag/antwoord-bestand**: dien een bestand in met vragen en
+  antwoorden (JSON, CSV of tekst) en dat wordt je test.
+  - **open** en **gesloten (meerkeuze)** vragen worden herkend (op basis van de opties in het bestand)
+  - instelbaar: maximaal aantal vragen, **tijdslimiet**, **tips** aan/uit en het **vak**
 - **Nakijken**: na de test krijg je een **score** en per vraag de **verbetering/uitleg**.
 - **Resultaten opgeslagen** op het dashboard onder het juiste vak, met een visueel percentage.
 
-## 🤖 AI-vraaggeneratie
+## 📝 Vraag/antwoord-bestand
 
-De app ondersteunt drie modi (instelbaar via `AI_PROVIDER`):
-
-| Modus      | Betrekening                                                       |
-| ---------- | ----------------------------------------------------------------- |
-| `openai`   | Slimme vragen via de OpenAI API (betaald, vereist `OPENAI_API_KEY`) |
-| `ollama`   | **Gratis & lokaal** via een eigen Ollama-server (geen API-sleutel)  |
-| `heuristic`| Ingebouwde regelgebaseerde motor (werkt altijd, geen internet)     |
-| `auto`     | OpenAI als er een sleutel is, anders Ollama, anders `heuristic`    |
-
-De AI krijgt **de volledige tekst van het bestand én de bestandsnaam**. De prompt draagt de AI op
-het hoofdonderwerp te bepalen en daar vragen over te stellen (conceptueel begrip), en geen vragen
-te maken over onbelangrijke losse woorden.
-
-### Lokale AI met Ollama (gratis)
-
-1. Installeer [Ollama](https://ollama.com) en trek een model binnen:
-   ```bash
-   ollama pull llama3.1
-   ```
-2. Zet in `.env`:
-   ```env
-   AI_PROVIDER=ollama
-   OLLAMA_URL=http://localhost:11434
-   OLLAMA_MODEL=llama3.1
-   ```
-
-Lukt de AI-aanroep niet (bv. geen server/sleutel), dan schakelt de app automatisch terug
-naar de heuristiek en wordt er alsnog een test gemaakt.
-
-## 📝 Zelf vragen en antwoorden aanleveren (Q&A-import)
-
-Vink bij het uploaden **"Bestand bevat al vragen & antwoorden"** aan. Ondersteunde formaten:
+Vink bij het uploaden niets speciaal aan — dien gewoon je bestand in. Ondersteunde formaten:
 
 **JSON**
 ```json
@@ -88,8 +43,9 @@ Vraag: Wat is een switch?
 Antwoord: Een apparaat dat apparaten in een LAN verbindt.
 ```
 
-Ook genummerde lijsten (`1. vraag` / `Antwoord:`) en `optie:`-regels worden herkend. Vragen met
-meerkeuze-opties worden als gesloten vraag getoond, anders als open vraag.
+Ook genummerde lijsten (`1. vraag` / `Antwoord:`) en `optie:`-regels worden herkend.
+Vragen met meerkeuze-opties worden als gesloten vraag getoond, anders als open vraag.
+Je kan ook een PDF, PowerPoint of tekstbestand insturen zolang de tekst de vragen en antwoorden bevat.
 
 ## 🚀 Starten
 
@@ -110,24 +66,17 @@ npm run dev
 
 Kopieer `.env.example` naar `.env` en pas aan:
 
-| Variabele         | Betekenis                                        |
-| ----------------- | ------------------------------------------------ |
-| `PORT`            | Poort van de server (default 3000)               |
-| `JWT_SECRET`      | Geheime sleutel voor sessies (lang maken!)       |
-| `AI_PROVIDER`     | `auto` / `openai` / `ollama` / `heuristic`       |
-| `OPENAI_API_KEY`  | Optioneel: OpenAI-sleutel                        |
-| `OPENAI_MODEL`    | OpenAI-model (default `gpt-4o-mini`)             |
-| `OLLAMA_URL`      | Optioneel: URL van je Ollama-server              |
-| `OLLAMA_MODEL`    | Ollama-model (default `llama3.1`)                |
+| Variabele    | Betekenis                                  |
+| ------------ | ------------------------------------------ |
+| `PORT`       | Poort van de server (default 3000)         |
+| `JWT_SECRET` | Geheime sleutel voor sessies (lang maken!) |
 
 ## 🗂️ Projectstructuur
 
 ```
 server.js          Express-server + API-routes
 lib/db.js          JSON-opslag (data/db.json)
-lib/parse.js       Volledige tekstextractie uit PDF / PPTX / PPT (+ pag./slide-telling)
-lib/clean.js       Opschonen + filteren tot echte theorie-zinnen
-lib/generate.js    Vraaggeneratie (OpenAI / Ollama / heuristiek, onderwerpgericht)
+lib/parse.js       Tekstextractie uit PDF / PPTX / PPT (+ pag./slide-telling)
 lib/qa.js          Q&A-import (JSON / CSV / tekst met vraag & antwoord)
 lib/grade.js       Nakijken + feedback per vraag
 public/            Frontend (HTML, CSS, vanilla JS SPA)

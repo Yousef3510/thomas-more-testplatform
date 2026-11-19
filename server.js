@@ -9,7 +9,6 @@ const { v4: uuidv4 } = require('uuid');
 
 const db = require('./lib/db');
 const { extractText } = require('./lib/parse');
-const { generateQuestions } = require('./lib/generate');
 const { gradeAttempt } = require('./lib/grade');
 const { parseQA } = require('./lib/qa');
 
@@ -32,16 +31,6 @@ const { parseQA } = require('./lib/qa');
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const TOKEN_TTL = '7d';
-
-// AI configuration (OpenAI and/or a local Ollama server).
-// AI_PROVIDER: 'auto' | 'openai' | 'ollama' | 'heuristic'
-const AI_CFG = {
-  provider: process.env.AI_PROVIDER || 'auto',
-  openaiKey: process.env.OPENAI_API_KEY || '',
-  openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-  ollamaUrl: process.env.OLLAMA_URL || '',
-  ollamaModel: process.env.OLLAMA_MODEL || 'llama3.1'
-};
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
@@ -95,7 +84,6 @@ function stripAnswersForClient(test) {
     engine: test.engine,
     timeLimit: test.timeLimit,
     tips: test.tips,
-    type: test.type,
     pages: test.pages || 0,
     slides: test.slides || 0,
     stats: test.stats || null,
@@ -165,21 +153,6 @@ app.get('/api/subjects', (req, res) => {
   res.json({ subjects: store.subjects });
 });
 
-// ---------- Config (AI availability) ----------
-
-app.get('/api/config', (req, res) => {
-  const provider = require('./lib/generate').resolveProvider(AI_CFG);
-  res.json({
-    ai: provider || 'heuristic',
-    aiLabel:
-      provider === 'openai'
-        ? 'AI (OpenAI)'
-        : provider === 'ollama'
-        ? 'AI (Ollama lokaal)'
-        : 'Automatisch (zonder AI)'
-  });
-});
-
 // ---------- Results / dashboard ----------
 
 app.get('/api/dashboard', auth, (req, res) => {
@@ -246,11 +219,8 @@ app.post('/api/tests', auth, upload.single('file'), async (req, res) => {
   if (!subject) return res.status(400).json({ error: 'Onbekend vak' });
 
   const count = parseInt(req.body.count, 10) || 5;
-  const type = ['open', 'closed', 'mixed'].includes(req.body.type) ? req.body.type : 'closed';
   const tips = req.body.tips === 'true' || req.body.tips === true;
   const timeLimit = Math.max(0, parseInt(req.body.timeLimit, 10) || 0); // minutes, 0 = geen
-
-  const qaImport = req.body.qaImport === 'true' || req.body.qaImport === true;
 
   const { text, warning, pages, slides } = await extractText(file);
   if (!text) {
@@ -261,47 +231,21 @@ app.post('/api/tests', auth, upload.single('file'), async (req, res) => {
     });
   }
 
-  let questions = [];
-  let engine = 'heuristic';
-  let stats = null;
-
-  if (qaImport) {
-    const qa = parseQA(text);
-    if (qa.length === 0) {
-      return res.status(400).json({
-        error:
-          'Geen vraag/antwoord-paren gevonden. Gebruik een van deze formaten: ' +
-          'JSON [{"question":"...","answer":"..."}], CSV "question,answer" of tekst met "Vraag: ..." / "Antwoord: ...".'
-      });
-    }
-    questions = qa.slice(0, count).map((q, i) => ({ id: 'q' + i, ...q }));
-    engine = 'import';
-    stats = { totalChars: text.length, theorySentences: 0, allSentences: 0, questions: questions.length, aiQuestions: 0 };
-  } else {
-    if (text.length < 40) {
-      return res.status(400).json({
-        error:
-          warning ||
-          'Te weinig tekst gevonden in het bestand om een test te maken. (Bij gescande PDF\'s is de tekst een afbeelding — gebruik een tekst-PDF of een PowerPoint.)'
-      });
-    }
-    const opts = { count, type, fileName: file.originalname };
-    try {
-      const generated = await generateQuestions(text, opts, AI_CFG);
-      questions = generated.questions;
-      engine = generated.engine;
-      stats = generated.stats;
-    } catch (err) {
-      return res.status(500).json({ error: 'Kon geen vragen genereren: ' + err.message });
-    }
-  }
-
-  if (questions.length === 0) {
+  const qa = parseQA(text);
+  if (qa.length === 0) {
     return res.status(400).json({
       error:
-        'Kon geen vragen genereren uit deze tekst. Het bestand lijkt vooral titels/opslommingen te bevatten. Probeer een bestand met volledige theorie-zinnen.'
+        'Geen vraag/antwoord-paren gevonden in dit bestand. Gebruik een van deze formaten: ' +
+        'JSON [{"question":"...","answer":"..."}], CSV "question,answer" of tekst met "Vraag: ..." / "Antwoord: ...".'
     });
   }
+
+  const questions = qa.slice(0, count).map((q, i) => ({ id: 'q' + i, ...q }));
+  const engine = 'import';
+  const stats = {
+    totalChars: text.length,
+    questions: questions.length
+  };
 
   const testId = uuidv4();
   const test = {
@@ -311,7 +255,6 @@ app.post('/api/tests', auth, upload.single('file'), async (req, res) => {
     title: subject.name + ' - ' + file.originalname.replace(/\.[^.]+$/, ''),
     fileName: file.originalname,
     engine: engine,
-    type,
     tips,
     timeLimit,
     pages: pages || 0,

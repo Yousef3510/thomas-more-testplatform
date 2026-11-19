@@ -7,8 +7,7 @@ const state = {
   subjects: [],
   dash: null,
   test: null,
-  result: null,
-  config: { ai: 'heuristic', aiLabel: 'Automatisch (zonder AI)' }
+  result: null
 };
 
 const app = document.getElementById('app');
@@ -178,12 +177,6 @@ async function boot() {
     state.user = me.user;
     const subs = await api('/subjects');
     state.subjects = subs.subjects;
-    try {
-      const cfg = await api('/config');
-      if (cfg && cfg.aiLabel) state.config = cfg;
-    } catch (e) {
-      /* ignore */
-    }
     await loadDashboard();
     renderDashboard();
   } catch (err) {
@@ -263,7 +256,7 @@ function renderDashboard() {
         <div class="page-head">
           <div>
             <h2>Dashboard</h2>
-            <p>Welkom terug! Kies een vak of dien een nieuw bestand in om automatisch een oefentest te maken.</p>
+            <p>Welkom terug! Kies een vak of dien een bestand met vragen en antwoorden in om een oefentest te maken.</p>
           </div>
           <button class="btn btn-primary" id="newTestBtn" style="width:auto">+ Nieuwe test</button>
         </div>
@@ -309,8 +302,7 @@ function openUpload(subjectId) {
   backdrop.innerHTML = `
     <div class="modal">
       <h2>Nieuwe oefentest</h2>
-      <p class="sub">Dien een PDF of PowerPoint in. Het hele bestand wordt gelezen en enkel de theorie wordt bevraagd.</p>
-      <p class="sub" style="margin-top:-10px">🤖 Modus: ${esc(state.config.aiLabel)}</p>
+      <p class="sub">Dien een bestand in met vragen en antwoorden (JSON, CSV of tekst). Dat wordt je oefentest.</p>
 
       <label class="dropzone" id="dropzone">
         <div class="big">Klik of sleep je bestand hier</div>
@@ -319,14 +311,7 @@ function openUpload(subjectId) {
         <input type="file" id="fileInput" accept=".pdf,.ppt,.pptx,.txt,.csv,.json" class="hidden" />
       </label>
 
-      <div class="switch-row" style="padding-top:0">
-        <div>
-          <div style="font-weight:700">Bestand bevat al vragen &amp; antwoorden</div>
-          <div class="muted" style="font-size:12px">Zelf een Q&amp;A-bestand aanleveren i.p.v. automatisch genereren</div>
-        </div>
-        <label class="switch"><input type="checkbox" id="mQA" /><span class="slider"></span></label>
-      </div>
-      <p class="muted hidden" id="qaHint" style="font-size:12px;margin:-6px 0 16px;line-height:1.45">
+      <p class="muted" style="font-size:12px;margin:0 0 16px;line-height:1.5">
         Formaten: JSON <code>[{"question":"...","answer":"..."}]</code>, CSV <code>question,answer</code> of tekst met
         <code>Vraag: ...</code> / <code>Antwoord: ...</code>. Meerkeuze: voeg <code>optie:</code>-regels of extra CSV-kolommen toe.
       </p>
@@ -339,16 +324,8 @@ function openUpload(subjectId) {
           </select>
         </div>
         <div class="field">
-          <label for="mCount">Aantal vragen</label>
-          <input type="number" id="mCount" min="1" max="30" value="5" />
-        </div>
-        <div class="field" id="typeField">
-          <label for="mType">Type vragen</label>
-          <select id="mType">
-            <option value="closed">Gesloten (meerkeuze)</option>
-            <option value="open">Open</option>
-            <option value="mixed">Gemengd</option>
-          </select>
+          <label for="mCount">Aantal vragen (max)</label>
+          <input type="number" id="mCount" min="1" max="100" value="10" />
         </div>
         <div class="field">
           <label for="mTime">Tijdslimiet (minuten, 0 = geen)</label>
@@ -366,7 +343,7 @@ function openUpload(subjectId) {
 
       <div style="display:flex;gap:10px;margin-top:18px">
         <button class="btn btn-outline" id="mCancel" style="flex:0 0 auto">Annuleren</button>
-        <button class="btn btn-primary" id="mSubmit" style="flex:1">Genereer test</button>
+        <button class="btn btn-primary" id="mSubmit" style="flex:1">Maak test</button>
       </div>
     </div>`;
   document.body.appendChild(backdrop);
@@ -375,17 +352,6 @@ function openUpload(subjectId) {
   const fileInput = document.getElementById('fileInput');
   const badge = document.getElementById('fileBadge');
   const dz = document.getElementById('dropzone');
-  const mQA = document.getElementById('mQA');
-  const qaHint = document.getElementById('qaHint');
-  const typeField = document.getElementById('typeField');
-
-  function syncQA() {
-    const on = mQA.checked;
-    qaHint.classList.toggle('hidden', !on);
-    typeField.classList.toggle('hidden', on);
-  }
-  mQA.addEventListener('change', syncQA);
-  syncQA();
 
   function setFile(f) {
     file = f;
@@ -428,15 +394,13 @@ function openUpload(subjectId) {
     }
     const btn = document.getElementById('mSubmit');
     btn.disabled = true;
-    btn.textContent = 'Test genereren...';
+    btn.textContent = 'Test maken...';
     const fd = new FormData();
     fd.append('file', file);
     fd.append('subjectId', document.getElementById('mSubject').value);
     fd.append('count', document.getElementById('mCount').value);
-    fd.append('type', document.getElementById('mType').value);
     fd.append('tips', document.getElementById('mTips').checked);
     fd.append('timeLimit', document.getElementById('mTime').value);
-    fd.append('qaImport', mQA.checked);
 
     try {
       const data = await api('/tests', { method: 'POST', body: fd });
@@ -458,7 +422,7 @@ function openUpload(subjectId) {
     } catch (err) {
       toast(err.message, 'error');
       btn.disabled = false;
-      btn.textContent = 'Genereer test';
+      btn.textContent = 'Maak test';
     }
   });
 }
@@ -513,14 +477,7 @@ function renderTest() {
   if (timerHandle) clearInterval(timerHandle);
 
   const totalSec = (test.timeLimit || 0) * 60;
-  const engineLabel =
-    test.engine === 'openai'
-      ? 'AI-gegenereerd (OpenAI)'
-      : test.engine === 'ollama'
-      ? 'AI-gegenereerd (lokaal)'
-      : test.engine === 'import'
-      ? 'Zelf aangeleverd (Q&A)'
-      : 'Automatisch gegenereerd';
+  const engineLabel = 'Zelf aangeleverd (Q&A)';
   const readLabel =
     test.pages > 0
       ? `${test.pages} pagina's`
