@@ -193,6 +193,10 @@ button {
   opacity: 0.6;
   cursor: not-allowed;
 }
+.btn-sm {
+  font-size: 12px;
+  padding: 6px 10px;
+}
 .full {
   width: 100%;
 }
@@ -398,7 +402,7 @@ button {
 }
 .table-row {
   display: grid;
-  grid-template-columns: 1.6fr 1fr 90px 130px;
+  grid-template-columns: 1.6fr 1fr 90px 130px 44px;
   align-items: center;
   gap: 12px;
   padding: 14px 20px;
@@ -673,6 +677,25 @@ button {
   align-items: center;
   margin-top: 24px;
   gap: 12px;
+}
+.test-actions {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.06);
+}
+.test-actions .btn {
+  width: auto;
 }
 
 /* ---------- Result view ---------- */

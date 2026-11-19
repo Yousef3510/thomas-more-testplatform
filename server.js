@@ -219,6 +219,7 @@ app.post('/api/tests', auth, upload.single('file'), async (req, res) => {
   if (!subject) return res.status(400).json({ error: 'Onbekend vak' });
 
   const count = parseInt(req.body.count, 10) || 5;
+  const type = ['open', 'closed', 'mixed'].includes(req.body.type) ? req.body.type : 'closed';
   const tips = req.body.tips === 'true' || req.body.tips === true;
   const timeLimit = Math.max(0, parseInt(req.body.timeLimit, 10) || 0); // minutes, 0 = geen
 
@@ -231,7 +232,7 @@ app.post('/api/tests', auth, upload.single('file'), async (req, res) => {
     });
   }
 
-  const qa = parseQA(text);
+  const qa = parseQA(text, type);
   if (qa.length === 0) {
     return res.status(400).json({
       error:
@@ -353,6 +354,15 @@ app.get('/api/results', auth, (req, res) => {
       createdAt: r.createdAt
     }));
   res.json({ results });
+});
+
+app.delete('/api/results/:id', auth, (req, res) => {
+  const store = db.read();
+  const idx = store.results.findIndex((r) => r.id === req.params.id && r.userId === req.user.id);
+  if (idx === -1) return res.status(404).json({ error: 'Resultaat niet gevonden' });
+  store.results.splice(idx, 1);
+  db.write(store);
+  return res.json({ ok: true });
 });
 
 // ---------- static SPA fallback ----------

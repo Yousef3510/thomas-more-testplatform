@@ -229,6 +229,9 @@ function renderDashboard() {
           <div>${r.correct}/${r.total} juist</div>
           <div><span class="pill ${scoreClass(r.score)}">${r.score}%</span></div>
           <div class="muted">${fmtDate(r.createdAt)}</div>
+          <div>
+            <button class="btn btn-outline btn-sm" data-del="${r.id}">Verwijderen</button>
+          </div>
         </div>`
         )
         .join('')
@@ -277,7 +280,7 @@ function renderDashboard() {
           </div>
           <div class="table">
             <div class="table-row head">
-              <div>Test</div><div>Score</div><div>%</div><div>Datum</div>
+              <div>Test</div><div>Score</div><div>%</div><div>Datum</div><div></div>
             </div>
             ${recentRows}
           </div>
@@ -293,6 +296,18 @@ function renderDashboard() {
   document.querySelectorAll('[data-history]').forEach((b) =>
     b.addEventListener('click', () => openHistory(b.getAttribute('data-history')))
   );
+  document.querySelectorAll('[data-del]').forEach((b) => {
+    b.addEventListener('click', async () => {
+      const id = b.getAttribute('data-del');
+      try {
+        await api('/results/' + id, { method: 'DELETE' });
+        await loadDashboard();
+        renderDashboard();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    });
+  });
 }
 
 // ---------------- Upload modal ----------------
@@ -326,6 +341,14 @@ function openUpload(subjectId) {
         <div class="field">
           <label for="mCount">Aantal vragen (max)</label>
           <input type="number" id="mCount" min="1" max="100" value="10" />
+        </div>
+        <div class="field">
+          <label for="mType">Type vragen</label>
+          <select id="mType">
+            <option value="closed">Gesloten (meerkeuze)</option>
+            <option value="open">Open</option>
+            <option value="mixed">Gemengd</option>
+          </select>
         </div>
         <div class="field">
           <label for="mTime">Tijdslimiet (minuten, 0 = geen)</label>
@@ -399,6 +422,7 @@ function openUpload(subjectId) {
     fd.append('file', file);
     fd.append('subjectId', document.getElementById('mSubject').value);
     fd.append('count', document.getElementById('mCount').value);
+    fd.append('type', document.getElementById('mType').value);
     fd.append('tips', document.getElementById('mTips').checked);
     fd.append('timeLimit', document.getElementById('mTime').value);
 
@@ -493,7 +517,7 @@ function renderTest() {
           <div><h1>${esc(test.title)}</h1><p>${esc(engineLabel)} · ${test.questions.length} vragen · ${esc(readLabel)} gelezen</p></div>
         </div>
       </header>
-      <main class="test-wrap">
+      <main class="test-wrap" style="padding-bottom:110px">
         <div class="test-head">
           <div class="muted">${totalSec > 0 ? '⏱ Je hebt een tijdslimiet' : 'Geen tijdslimiet'}</div>
           ${totalSec > 0 ? `<div class="timer" id="timer">${fmtTime(totalSec)}</div>` : ''}
@@ -502,9 +526,9 @@ function renderTest() {
 
         <form id="testForm">
           ${test.questions.map((q, i) => renderQuestion(q, i)).join('')}
-          <div class="test-footer">
-            <div class="muted" id="answeredCount">0 / ${test.questions.length} beantwoord</div>
-            <button type="submit" class="btn btn-primary" style="width:auto">Test insturen</button>
+          <div class="test-actions">
+            <div class="muted" id="answeredCountBar">0 / ${test.questions.length} beantwoord</div>
+            <button type="submit" class="btn btn-primary" style="width:auto">Test afronden</button>
           </div>
         </form>
       </main>
@@ -601,18 +625,20 @@ function updateProgress() {
   const answers = collectAnswers();
   const answered = Object.values(answers).filter((v) => String(v).trim() !== '').length;
   const total = state.test.questions.length;
-  const count = document.getElementById('answeredCount');
+  const countBar = document.getElementById('answeredCountBar');
   const prog = document.getElementById('progress');
-  if (count) count.textContent = `${answered} / ${total} beantwoord`;
+  const label = `${answered} / ${total} beantwoord`;
+  if (countBar) countBar.textContent = label;
   if (prog) prog.style.width = `${(answered / total) * 100}%`;
 }
 
 async function submitTest(auto) {
-  const btn = document.querySelector('#testForm button[type=submit]');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Nakijken...';
-  }
+  const allBtns = Array.from(document.querySelectorAll('#testForm button[type=submit], button[form="testForm"]'));
+  const originals = allBtns.map((b) => b.textContent);
+  allBtns.forEach((b) => {
+    b.disabled = true;
+    b.textContent = 'Nakijken...';
+  });
   if (timerHandle) clearInterval(timerHandle);
   const timeTakenSeconds = Math.round((Date.now() - startTime) / 1000);
   const answers = collectAnswers();
@@ -627,10 +653,10 @@ async function submitTest(auto) {
     loadDashboard().catch(() => {});
   } catch (err) {
     toast(err.message, 'error');
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'Test insturen';
-    }
+    allBtns.forEach((b, i) => {
+      b.disabled = false;
+      b.textContent = originals[i];
+    });
   }
 }
 
