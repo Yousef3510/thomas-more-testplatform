@@ -1,0 +1,29 @@
+{
+  "name": "thomas-more-testplatform",
+  "version": "1.0.0",
+  "description": "Testplatform voor studenten Audiologie en Logopedie (Thomas More) - upload PDF/PowerPoint en genereer automatisch oefentests.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "audiology",
+    "logopedie",
+    "thomas-more",
+    "testplatform",
+    "quiz"
+  ],
+  "author": "Yousef Ben Ayad",
+  "license": "MIT",
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.0",
+    "uuid": "^11.0.0",
+    "pdfjs-dist": "^6.0.0"
+  }
+}
