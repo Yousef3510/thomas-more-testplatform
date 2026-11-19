@@ -7,7 +7,8 @@ const state = {
   subjects: [],
   dash: null,
   test: null,
-  result: null
+  result: null,
+  config: { ai: 'heuristic', aiLabel: 'Automatisch (zonder AI)' }
 };
 
 const app = document.getElementById('app');
@@ -177,6 +178,12 @@ async function boot() {
     state.user = me.user;
     const subs = await api('/subjects');
     state.subjects = subs.subjects;
+    try {
+      const cfg = await api('/config');
+      if (cfg && cfg.aiLabel) state.config = cfg;
+    } catch (e) {
+      /* ignore */
+    }
     await loadDashboard();
     renderDashboard();
   } catch (err) {
@@ -302,7 +309,8 @@ function openUpload(subjectId) {
   backdrop.innerHTML = `
     <div class="modal">
       <h2>Nieuwe oefentest</h2>
-      <p class="sub">Dien een PDF of PowerPoint in. Wij halen de tekst eruit en maken automatisch vragen.</p>
+      <p class="sub">Dien een PDF of PowerPoint in. Het hele bestand wordt gelezen en enkel de theorie wordt bevraagd.</p>
+      <p class="sub" style="margin-top:-10px">🤖 Modus: ${esc(state.config.aiLabel)}</p>
 
       <label class="dropzone" id="dropzone">
         <div class="big">Klik of sleep je bestand hier</div>
@@ -412,6 +420,16 @@ function openUpload(subjectId) {
       close();
       state.test = data.test;
       state.test.engine = data.engine;
+      state.test.pages = data.pages || 0;
+      state.test.slides = data.slides || 0;
+      state.test.stats = data.stats || null;
+      const readMsg =
+        data.pages > 0
+          ? `Test klaar: ${data.count} vragen uit ${data.pages} pagina's.`
+          : data.slides > 0
+          ? `Test klaar: ${data.count} vragen uit ${data.slides} slides.`
+          : `Test klaar: ${data.count} vragen.`;
+      if (!data.warning) toast(readMsg, 'success');
       renderTest();
     } catch (err) {
       toast(err.message, 'error');
@@ -471,13 +489,25 @@ function renderTest() {
   if (timerHandle) clearInterval(timerHandle);
 
   const totalSec = (test.timeLimit || 0) * 60;
+  const engineLabel =
+    test.engine === 'openai'
+      ? 'AI-gegenereerd (OpenAI)'
+      : test.engine === 'ollama'
+      ? 'AI-gegenereerd (lokaal)'
+      : 'Automatisch gegenereerd';
+  const readLabel =
+    test.pages > 0
+      ? `${test.pages} pagina's`
+      : test.slides > 0
+      ? `${test.slides} slides`
+      : 'hele bestand';
 
   app.innerHTML = `
     <div class="shell">
       <header class="topbar">
         <div class="brand">
           <div class="logo">TM</div>
-          <div><h1>${esc(test.title)}</h1><p>${esc(test.engine === 'openai' ? 'AI-gegenereerd' : 'Automatisch gegenereerd')} · ${test.questions.length} vragen</p></div>
+          <div><h1>${esc(test.title)}</h1><p>${esc(engineLabel)} · ${test.questions.length} vragen · ${esc(readLabel)} gelezen</p></div>
         </div>
       </header>
       <main class="test-wrap">

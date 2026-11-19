@@ -32,6 +32,16 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const TOKEN_TTL = '7d';
 
+// AI configuration (OpenAI and/or a local Ollama server).
+// AI_PROVIDER: 'auto' | 'openai' | 'ollama' | 'heuristic'
+const AI_CFG = {
+  provider: process.env.AI_PROVIDER || 'auto',
+  openaiKey: process.env.OPENAI_API_KEY || '',
+  openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  ollamaUrl: process.env.OLLAMA_URL || '',
+  ollamaModel: process.env.OLLAMA_MODEL || 'llama3.1'
+};
+
 const app = express();
 app.use(express.json({ limit: '5mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -85,6 +95,9 @@ function stripAnswersForClient(test) {
     timeLimit: test.timeLimit,
     tips: test.tips,
     type: test.type,
+    pages: test.pages || 0,
+    slides: test.slides || 0,
+    stats: test.stats || null,
     questions: test.questions.map((q) => {
       const base = {
         id: q.id,
@@ -149,6 +162,21 @@ app.get('/api/me', auth, (req, res) => {
 app.get('/api/subjects', (req, res) => {
   const store = db.read();
   res.json({ subjects: store.subjects });
+});
+
+// ---------- Config (AI availability) ----------
+
+app.get('/api/config', (req, res) => {
+  const provider = require('./lib/generate').resolveProvider(AI_CFG);
+  res.json({
+    ai: provider || 'heuristic',
+    aiLabel:
+      provider === 'openai'
+        ? 'AI (OpenAI)'
+        : provider === 'ollama'
+        ? 'AI (Ollama lokaal)'
+        : 'Automatisch (zonder AI)'
+  });
 });
 
 // ---------- Results / dashboard ----------
@@ -221,17 +249,19 @@ app.post('/api/tests', auth, upload.single('file'), async (req, res) => {
   const tips = req.body.tips === 'true' || req.body.tips === true;
   const timeLimit = Math.max(0, parseInt(req.body.timeLimit, 10) || 0); // minutes, 0 = geen
 
-  const { text, warning } = await extractText(file);
+  const { text, warning, pages, slides } = await extractText(file);
   if (!text || text.length < 40) {
     return res.status(400).json({
-      error: warning || 'Te weinig tekst gevonden in het bestand om een test te maken.'
+      error:
+        warning ||
+        'Te weinig tekst gevonden in het bestand om een test te maken. (Bij gescande PDF\'s is de tekst een afbeelding — gebruik een tekst-PDF of een PowerPoint.)'
     });
   }
 
   const opts = { count, type };
   let generated;
   try {
-    generated = await generateQuestions(text, opts);
+    generated = await generateQuestions(text, opts, AI_CFG);
   } catch (err) {
     return res.status(500).json({ error: 'Kon geen vragen genereren: ' + err.message });
   }
@@ -239,7 +269,8 @@ app.post('/api/tests', auth, upload.single('file'), async (req, res) => {
   const questions = generated.questions;
   if (questions.length === 0) {
     return res.status(400).json({
-      error: 'Kon geen vragen genereren uit deze tekst. Probeer een tekst met volledige zinnen.'
+      error:
+        'Kon geen vragen genereren uit deze tekst. Het bestand lijkt vooral titels/opslommingen te bevatten. Probeer een bestand met volledige theorie-zinnen.'
     });
   }
 
@@ -254,6 +285,9 @@ app.post('/api/tests', auth, upload.single('file'), async (req, res) => {
     type,
     tips,
     timeLimit,
+    pages: pages || 0,
+    slides: slides || 0,
+    stats: generated.stats,
     createdAt: Date.now(),
     questions
   };
@@ -276,6 +310,9 @@ app.post('/api/tests', auth, upload.single('file'), async (req, res) => {
     warning,
     engine: generated.engine,
     count: questions.length,
+    pages: pages || 0,
+    slides: slides || 0,
+    stats: generated.stats,
     test: stripAnswersForClient(test)
   });
 });
